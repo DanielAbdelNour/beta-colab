@@ -16,8 +16,7 @@ import os
 import subprocess
 import glob
 import json
-import gym
-from PIL import Image
+
 
 IMAGE_DIR = 'img/'
 
@@ -147,7 +146,7 @@ class Player():
         self.score += reward
 
 # defines the Rook environment
-class Game(gym.Env):
+class Game():
 
     # environment attributes
     MAX_BOMBS = 1
@@ -167,11 +166,9 @@ class Game(gym.Env):
     ACTIONS_DICT = {0:(0,0),5:(0,0),1:(0,-1),2:(0,1),3:(-1,0),4:(1,0)}
 
     def __init__(self,rows=11,cols=13):
-        super().__init__()
         self.rows=rows
         self.cols=cols
         self.turn_i = 0
-        self.step_i = 0
         confi_json_file = "config.json"
         with open ("config.json") as f:
             self.config_data = json.load(f)
@@ -352,7 +349,6 @@ class Game(gym.Env):
                         board[player.position] = self.BOARD_DICT[self.ON_BOMB_LIST[player.number]] # place bomb on map
                 elif action == actions.NONE:
                     pass
-                    
                 else:
                     # move
                     board[player.position] = self.BOARD_DICT[self.PLAYER_LIST[player.number]]
@@ -396,12 +392,9 @@ class Game(gym.Env):
 
 
     def step(self, player_actions):
-        self.step_i += 1
-        nblocks_before_step = np.sum(self.board == 3)
-        player_actions = [player_actions, 0]
+
         rewards = np.zeros((len(self.players),1)) # rewards assigned this turn
         bomb_list = [] # populate list of bombs to return to players
-        p0_old_score = self.players[0].score
 
         # get player's new positions
         # this is to make things in random
@@ -433,11 +426,9 @@ class Game(gym.Env):
                     if player.num_bombs > 0:
                         player.bombs.append(Bomb(player.position, self.get_tiles_in_range(player.position), player.number, self.MAX_TIMER)) # create a bomb instance
                         player.num_bombs -= 1 # one less bomb available for the player
-                        self.board[player.position] = self.BOARD_DICT[self.ON_BOMB_LIST[player.number]] # place bomb on map\
-                    else:
-                        player.score -= 1 #DAN penelize trying to adda bomb
+                        self.board[player.position] = self.BOARD_DICT[self.ON_BOMB_LIST[player.number]] # place bomb on map
                 elif action == actions.NONE:
-                    player.score -= 1 #DAN penelize doing nothing
+                    pass
                 else:
                     # move
                     self.board[player.position] = self.BOARD_DICT[self.PLAYER_LIST[player.number]]
@@ -474,18 +465,7 @@ class Game(gym.Env):
                     player.score += self.get_reward('destroy_blocks', num_blocks)
                     player.num_bombs += 1 # return bomb to the player
 
-        # observation, reward, done, meta
-        reward_delta = self.players[0].score - p0_old_score
-        nblocks_after_step = np.sum(self.board == 3)
-        mblocks_delta = (nblocks_before_step - nblocks_after_step).astype(np.float)
-
-        block_reward = 0
-        if (mblocks_delta) > 0:
-            block_reward = (mblocks_delta**2) * (1 - (self.step_i / float(25) )) 
-        else:    
-            block_reward= -1 * (self.step_i / float(25))
-        # self.board
-        return self.board, reward_delta, self.done, {'players': self.players, 'bomb_list': bomb_list}
+        return self.board, self.done, self.players, bomb_list
 
     def state_check_if_valid(self, action, curr_pos, new_pos, current_board):
         ##Armin
@@ -739,7 +719,6 @@ class Game(gym.Env):
         self.done = False # checks if game over
 
         self.turn_i = 0
-        self.step_i = 0
 
         # number of soft blocks to place
         num_soft_blocks = int(math.floor(0.3*self.cols*self.rows))
@@ -774,19 +753,13 @@ class Game(gym.Env):
         open_pos.remove(self.cols * self.rows - self.cols*2 - 1)
         open_pos.remove(self.cols * self.rows - self.cols - 1)
         # choose a random subset from open spots
+        random.seed(30)
         rand_pos = random.sample(open_pos,num_soft_blocks)
         flat_board[rand_pos] = self.BOARD_DICT['soft_block']
         self.board = np.reshape(flat_board,(self.rows,self.cols))
 
-        return self.board #self.board, self.players
+        return self.board, self.players
 
-    
-    def get_board_image(self):
-        nimg = Image.fromarray(self.board.astype(np.uint8) * 255).resize((88, 88), Image.NEAREST).convert('L')
-        barr = np.expand_dims(np.array(nimg), 2)
-        return barr
-    
-    
     def render(self, graphical=True):
         self.turn_i = self.turn_i +1
         folder = "./temp_photo"
